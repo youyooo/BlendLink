@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blendlink-daemon"
+version = "0.3.0"
+description = "Decentralized P2P Blender Asset Library"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "BlendLink Contributors"},
+]
+keywords = ["blender", "p2p", "asset-library", "bittorrent", "libtorrent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+p2p = ["python-libtorrent>=2.0"]
+tracker = ["python-libtorrent>=2.0", "Pillow>=10.0"]
+all = ["python-libtorrent>=2.0", "Pillow>=10.0", "cryptography>=41.0"]
+dev = [
+    "httpx>=0.24.0",
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+blendlink-daemon = "daemon.main:main"
+blendlink-tracker = "tracker.main:run_tracker"
+
+[project.urls]
+Homepage = "https://github.com/youyooo/BlendLink"
+Repository = "https://github.com/youyooo/BlendLink"
+Issues = "https://github.com/youyooo/BlendLink/issues"
+
+[tool.setuptools.packages.find]
+include = ["daemon*", "client*", "shared*", "tracker*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.txt"]

@@ -22,9 +22,9 @@ def install_packages():
         print(f"正在安装 {pkg}...")
         try:
             subprocess.check_call([python, "-m", "pip", "install", pkg])
-            print(f"✓ {pkg} 安装成功")
+            print(f"[OK] {pkg} 安装成功")
         except subprocess.CalledProcessError:
-            print(f"✗ {pkg} 安装失败")
+            print(f"[FAIL] {pkg} 安装失败")
 
 if __name__ == "__main__":
     install_packages()

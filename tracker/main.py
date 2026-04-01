@@ -749,3 +749,9 @@ def startup():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+
+
+def run_tracker():
+    """CLI 入口点 (blendlink-tracker 命令)"""
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

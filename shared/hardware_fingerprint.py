@@ -10,8 +10,16 @@ import json
 import uuid
 import platform
 import subprocess
+import time
 from typing import Dict, Optional
 from pathlib import Path
+
+try:
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives import serialization
+except ImportError:
+    ed25519 = None
+    serialization = None
 
 
 class HardwareFingerprint:
@@ -21,71 +29,75 @@ class HardwareFingerprint:
     def get_system_info() -> Dict[str, str]:
         """收集系统硬件信息"""
         info = {}
-        
+        system = platform.system()
+
         # 1. CPU 信息
         try:
-            if platform.system() == "Windows":
+            if system == "Windows":
+                # wmic 在新版 Windows 已废弃，改用 PowerShell
                 result = subprocess.check_output(
-                    "wmic cpu get processorid", 
-                    shell=True, 
-                    text=True
+                    ["powershell", "-Command",
+                     "(Get-CimInstance Win32_Processor).ProcessorID"],
+                    shell=False, text=True, stderr=subprocess.DEVNULL
                 ).strip()
-                info["cpu_id"] = result.split('\n')[-1] if result else "unknown"
+                info["cpu_id"] = result or "unknown"
             else:
                 result = subprocess.check_output(
                     "cat /proc/cpuinfo | grep Serial",
-                    shell=True, text=True
+                    shell=True, text=True, stderr=subprocess.DEVNULL
                 ).strip()
                 info["cpu_id"] = result or "unknown"
-        except:
+        except Exception:
             info["cpu_id"] = "unknown"
-        
+
         # 2. 磁盘序列号
         try:
-            if platform.system() == "Windows":
+            if system == "Windows":
                 result = subprocess.check_output(
-                    "wmic logicaldisk get volumeserialnumber",
-                    shell=True, text=True
-                ).strip()
-                info["disk_serial"] = result.split('\n')[-1] if result else "unknown"
-            else:
-                result = subprocess.check_output(
-                    "lsblk -d -n -o SERIAL /dev/sda",
-                    shell=True, text=True
+                    ["powershell", "-Command",
+                     "(Get-CimInstance Win32_Volume)[0].SerialNumber"],
+                    shell=False, text=True, stderr=subprocess.DEVNULL
                 ).strip()
                 info["disk_serial"] = result or "unknown"
-        except:
-            info["disk_serial"] = "unknown"
-        
-        # 3. 主板信息
-        try:
-            if platform.system() == "Windows":
-                result = subprocess.check_output(
-                    "wmic baseboard get serialnumber",
-                    shell=True, text=True
-                ).strip()
-                info["motherboard_serial"] = result.split('\n')[-1] if result else "unknown"
             else:
                 result = subprocess.check_output(
-                    "dmidecode -t 2 | grep Serial",
-                    shell=True, text=True
+                    "lsblk -d -n -o SERIAL /dev/sda 2>/dev/null || echo unknown",
+                    shell=True, text=True, stderr=subprocess.DEVNULL
+                ).strip()
+                info["disk_serial"] = result or "unknown"
+        except Exception:
+            info["disk_serial"] = "unknown"
+
+        # 3. 主板序列号
+        try:
+            if system == "Windows":
+                result = subprocess.check_output(
+                    ["powershell", "-Command",
+                     "(Get-CimInstance Win32_BaseBoard).SerialNumber"],
+                    shell=False, text=True, stderr=subprocess.DEVNULL
                 ).strip()
                 info["motherboard_serial"] = result or "unknown"
-        except:
+            else:
+                result = subprocess.check_output(
+                    "dmidecode -t 2 2>/dev/null | grep Serial | cut -d: -f2 | tr -d ' '",
+                    shell=True, text=True, stderr=subprocess.DEVNULL
+                ).strip()
+                info["motherboard_serial"] = result or "unknown"
+        except Exception:
             info["motherboard_serial"] = "unknown"
-        
+
         # 4. 系统和架构
-        info["system"] = platform.system()
+        info["system"] = system
         info["machine"] = platform.machine()
         info["processor"] = platform.processor()
-        
+
         # 5. Mac 地址（网卡）
         try:
             mac = uuid.getnode()
             info["mac_address"] = format(mac, '012x')
-        except:
+        except Exception:
             info["mac_address"] = "unknown"
-        
+
         return info
     
     @staticmethod
@@ -146,14 +158,16 @@ class HardwareFingerprint:
         peer_id = HardwareFingerprint.generate_peer_id(fingerprint)
         
         # 生成 ED25519 密钥对（用于签名）
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        public_key = private_key.public_key()
-        
-        public_key_hex = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
-        ).hex()
+        if ed25519 and serialization:
+            private_key = ed25519.Ed25519PrivateKey.generate()
+            public_key = private_key.public_key()
+            public_key_hex = public_key.public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw
+            ).hex()
+        else:
+            # fallback：简化版公钥（直接用指纹）
+            public_key_hex = fingerprint
         
         # 生成友好名称
         if name_hint:
@@ -170,7 +184,7 @@ class HardwareFingerprint:
             "peer_id": peer_id,
             "public_key": public_key_hex,
             "identity_name": identity_name,
-            "created_timestamp": str(int(__import__('time').time())),
+            "created_timestamp": str(int(time.time())),
         }
 
 
@@ -342,16 +356,6 @@ class LocalLedger:
             "ledger_entries": len(self.get_ledger_history()),
             "ledger_file": str(self.ledger_file),
         }
-
-
-# ==================== 导入修复 ====================
-
-try:
-    from cryptography.hazmat.primitives import serialization
-except ImportError:
-    # 如果没有安装 cryptography，使用简化版
-    serialization = None
-    print("Warning: cryptography not installed. Using simplified fingerprint generation.")
 
 
 if __name__ == "__main__":

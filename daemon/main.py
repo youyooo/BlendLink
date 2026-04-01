@@ -25,6 +25,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "unknown"
+
 from shared.hardware_fingerprint import HardwareFingerprint, LocalLedger
 
 # ─── 日志配置 ───────────────────────────────────────
@@ -94,9 +99,9 @@ class DaemonCore:
                 tracker_url=self.tracker_url,
                 fingerprint=self._identity["fingerprint"],
             )
-            logger.info("✓ P2P 引擎已就绪（libtorrent）")
+            logger.info("P2P engine ready (libtorrent)")
         except ImportError:
-            logger.warning("⚠ libtorrent 未安装，P2P 功能暂不可用")
+            logger.warning("libtorrent not installed, P2P unavailable")
             logger.warning("  运行 python install.py 安装")
             self.p2p_client = None
         except Exception as e:
@@ -107,24 +112,17 @@ class DaemonCore:
         logger.info("正在关闭守护进程...")
         if self.p2p_client:
             self.p2p_client.shutdown()
-        logger.info("✓ 守护进程已停止")
+        logger.info("Daemon stopped")
 
 
 # ─── REST API 挂载 ──────────────────────────────────
 
 def mount_api(core: DaemonCore):
     """将 DaemonCore 挂载到 FastAPI app 的 state 上"""
-    from fastapi import FastAPI
     from daemon import api
 
     app = api.app
     app.state.daemon_core = core
-
-    # 让每个请求都能访问 core
-    async def get_core(request):
-        return request.app.state.daemon_core
-
-    app.dependency_overrides[api.get_core] = get_core
     return app
 
 
@@ -147,11 +145,11 @@ def register_with_tracker(core: DaemonCore):
             timeout=5,
         )
         if resp.status_code == 200:
-            logger.info(f"✓ Tracker 注册成功: {identity['identity_name']}")
+            logger.info(f"Tracker registered: {identity['identity_name']}")
         else:
             logger.warning(f"Tracker 注册失败: {resp.status_code}")
     except requests.ConnectionError:
-        logger.warning(f"⚠ 无法连接 Tracker ({core.tracker_url})，将在网络恢复后重试")
+        logger.warning(f"Cannot connect Tracker ({core.tracker_url}), will retry later")
     except Exception as e:
         logger.warning(f"注册失败: {e}")
 
@@ -171,16 +169,16 @@ def main():
 
     # 横幅
     print(f"""
-╔═══════════════════════════════════════════╗
-║        BlendLink v0.2.0  守护进程          ║
-║   Blender Decentralized Asset Library     ║
-╠═══════════════════════════════════════════╣
-║  身份    │ 硬件指纹（无需注册）             ║
-║  积分    │ 本地账本 + Tracker 验证         ║
-║  P2P     │ libtorrent                     ║
-║  API     │ http://127.0.0.1:{args.port}        ║
-║  Tracker │ {args.tracker}   ║
-╚═══════════════════════════════════════════╝
++=========================================+
+|        BlendLink v{__version__}  Daemon       |
+|   Blender Decentralized Asset Library  |
++=========================================+
+|  Auth    | Hardware Fingerprint         |
+|  Ledger  | Local + Tracker Verify       |
+|  P2P     | libtorrent                   |
+|  API     | http://127.0.0.1:{args.port:<14}|
+|  Tracker | {args.tracker:<29}|
++=========================================+
 """)
 
     # 初始化

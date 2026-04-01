@@ -5,15 +5,22 @@ BlendLink REST API - 本地 HTTP 接口
 供 Blender 插件调用，所有端点仅监听 localhost。
 """
 
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import logging
+import platform
+import sys
 
 logger = logging.getLogger("blendlink.api")
 
-app = FastAPI(title="BlendLink Daemon API", version="0.2.0")
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "unknown"
+
+app = FastAPI(title="BlendLink Daemon API", version=__version__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,9 +30,8 @@ app.add_middleware(
 )
 
 
-def get_core(request: Request):
-    """从 app.state 获取 DaemonCore（FastAPI 依赖）"""
-    return request.app.state.daemon_core
+
+
 
 
 # ─── 请求模型 ───────────────────────────────────────
@@ -52,23 +58,36 @@ class LikeReq(BaseModel):
 
 # ─── API 端点 ───────────────────────────────────────
 
+@app.get("/version")
+async def get_version():
+    """返回守护进程版本信息"""
+    return {
+        "version": __version__,
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "platform": platform.system(),
+    }
+
+
 @app.get("/status")
-async def get_status(request: Request, core=Depends(get_core)):
+async def get_status(request: Request):
+    core = request.app.state.daemon_core
     return core.get_status()
 
 
 @app.get("/identity")
-async def get_identity(core=Depends(get_core)):
+async def get_identity(request: Request):
+    core = request.app.state.daemon_core
     return core.get_identity()
 
 
 @app.get("/assets")
 async def get_assets(
+    request: Request,
     page: int = 1,
     limit: int = 20,
     category: Optional[str] = None,
-    core=Depends(get_core),
 ):
+    core = request.app.state.daemon_core
     import requests as http
     params = {"page": page, "limit": limit}
     if category and category != "ALL":
@@ -85,11 +104,12 @@ async def get_assets(
 
 @app.get("/assets/search")
 async def search_assets(
+    request: Request,
     q: str,
     category: Optional[str] = None,
     limit: int = 20,
-    core=Depends(get_core),
 ):
+    core = request.app.state.daemon_core
     import requests as http
     params = {"q": q, "limit": limit}
     if category and category != "ALL":
@@ -105,7 +125,8 @@ async def search_assets(
 
 
 @app.post("/download")
-async def download_asset(req: DownloadReq, core=Depends(get_core)):
+async def download_asset(req: DownloadReq, request: Request):
+    core = request.app.state.daemon_core
     import base64
     if not core.p2p_client:
         raise HTTPException(status_code=503, detail="P2P 不可用（libtorrent 未安装）")
@@ -134,7 +155,8 @@ async def download_asset(req: DownloadReq, core=Depends(get_core)):
 
 
 @app.post("/assets/{asset_id}/like")
-async def like_asset(asset_id: int, req: LikeReq, core=Depends(get_core)):
+async def like_asset(asset_id: int, req: LikeReq, request: Request):
+    core = request.app.state.daemon_core
     import requests as http
     try:
         resp = http.post(
@@ -151,7 +173,8 @@ async def like_asset(asset_id: int, req: LikeReq, core=Depends(get_core)):
 
 
 @app.get("/seeds")
-async def get_seeds(core=Depends(get_core)):
+async def get_seeds(request: Request):
+    core = request.app.state.daemon_core
     if not core.p2p_client:
         return {"seeds": [], "message": "P2P 未初始化"}
     return {
@@ -161,7 +184,8 @@ async def get_seeds(core=Depends(get_core)):
 
 
 @app.delete("/seeds/{info_hash}")
-async def stop_seeding(info_hash: str, core=Depends(get_core)):
+async def stop_seeding(info_hash: str, request: Request):
+    core = request.app.state.daemon_core
     if not core.p2p_client:
         raise HTTPException(status_code=503, detail="P2P 未初始化")
     success = core.p2p_client.force_delete_asset(info_hash)
@@ -174,7 +198,8 @@ async def stop_seeding(info_hash: str, core=Depends(get_core)):
 
 
 @app.post("/upload")
-async def upload_asset(req: UploadReq, core=Depends(get_core)):
+async def upload_asset(req: UploadReq, request: Request):
+    core = request.app.state.daemon_core
     import os, requests as http
     if not os.path.exists(req.file_path):
         raise HTTPException(status_code=404, detail=f"文件不存在: {req.file_path}")
@@ -222,7 +247,8 @@ async def upload_asset(req: UploadReq, core=Depends(get_core)):
 
 
 @app.post("/sync-ledger")
-async def sync_ledger(core=Depends(get_core)):
+async def sync_ledger(request: Request):
+    core = request.app.state.daemon_core
     from shared.ledger_sync import LedgerSyncManager
     try:
         ledger_file = str(core.ledger_dir / "ledger.jsonl")
@@ -238,7 +264,8 @@ async def sync_ledger(core=Depends(get_core)):
 
 
 @app.get("/ledger/history")
-async def get_ledger_history(limit: int = 20, core=Depends(get_core)):
+async def get_ledger_history(request: Request, limit: int = 20):
+    core = request.app.state.daemon_core
     return {
         "history": core.ledger.get_ledger_history(limit=limit),
         "balance": core.ledger.get_balance(),
@@ -246,7 +273,8 @@ async def get_ledger_history(limit: int = 20, core=Depends(get_core)):
 
 
 @app.get("/leaderboard")
-async def get_leaderboard(limit: int = 50, core=Depends(get_core)):
+async def get_leaderboard(request: Request, limit: int = 50):
+    core = request.app.state.daemon_core
     import requests as http
     try:
         resp = http.get(
@@ -263,7 +291,8 @@ async def get_leaderboard(limit: int = 50, core=Depends(get_core)):
 
 
 @app.post("/config/tracker")
-async def update_tracker(req: TrackerReq, core=Depends(get_core)):
+async def update_tracker(req: TrackerReq, request: Request):
+    core = request.app.state.daemon_core
     core.tracker_url = req.tracker_url
     if core.p2p_client:
         core.p2p_client.tracker_url = req.tracker_url

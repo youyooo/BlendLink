@@ -20,11 +20,23 @@ import subprocess
 import platform
 import shutil
 
-# 彩色输出
-def green(msg): return f"\033[92m{msg}\033[0m"
-def red(msg):   return f"\033[91m{msg}\033[0m"
-def yellow(msg): return f"\033[93m{msg}\033[0m"
-def cyan(msg):  return f"\033[96m{msg}\033[0m"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+
+
+def get_local_version():
+    """读取 version.py 中的版本号"""
+    try:
+        from version import __version__
+        return __version__
+    except ImportError:
+        return "0.2.0"
+
+# 彩色输出（兼容 Windows GBK 控制台）
+def green(msg): return f"[OK] {msg}"
+def red(msg):   return f"[FAIL] {msg}"
+def yellow(msg): return f"[WARN] {msg}"
+def cyan(msg):  return f"[INFO] {msg}"
 
 
 # ==================== 平台检测 ====================
@@ -111,7 +123,7 @@ def ensure_pip():
     print(cyan("[1/5] 检查 pip..."))
     try:
         subprocess.run([get_python(), "-m", "pip", "--version"], check=True, capture_output=True)
-        print(green("  ✓ pip 可用"))
+        print(green("  [OK] pip 可用"))
         return True
     except subprocess.CalledProcessError:
         print(yellow("  ! pip 不可用，尝试安装..."))
@@ -119,7 +131,7 @@ def ensure_pip():
             subprocess.run([get_python(), "-m", "ensurepip"], check=True, capture_output=True)
             return True
         except:
-            print(red("  ✗ pip 安装失败，请手动安装"))
+            print(red("  [FAIL] pip 安装失败，请手动安装"))
             return False
 
 
@@ -172,10 +184,10 @@ def install_python_dependencies(platform_type, packages, optional=False):
     to_install = []
     for pkg in packages:
         if check_package_available(pkg):
-            print(green(f"  ✓ {pkg} 已安装"))
+            print(green(f"  [OK] {pkg} 已安装"))
         else:
             to_install.append(pkg)
-            print(f"  → 需安装: {pkg}")
+            print(f"  -> 需安装: {pkg}")
 
     if not to_install:
         return True
@@ -184,13 +196,13 @@ def install_python_dependencies(platform_type, packages, optional=False):
     success, output = install_pip_packages(to_install)
 
     if success:
-        print(green(f"  ✓ {', '.join(to_install)} 安装成功"))
+        print(green(f"  [OK] {', '.join(to_install)} 安装成功"))
     else:
         if optional:
-            print(yellow(f"  ⚠ 可选包安装失败: {output}"))
+            print(yellow(f"  [WARN] 可选包安装失败: {output}"))
             return True  # 可选包失败不阻断
         else:
-            print(red(f"  ✗ {', '.join(to_install)} 安装失败"))
+            print(red(f"  [FAIL] {', '.join(to_install)} 安装失败"))
             print(output)
             return False
     return True
@@ -201,7 +213,7 @@ def install_libtorrent(platform_type):
     print(cyan("[4/5] 安装 libtorrent (P2P 核心)..."))
 
     if check_package_available("libtorrent"):
-        print(green("  ✓ libtorrent 已安装"))
+        print(green("  [OK] libtorrent 已安装"))
         return True
 
     # 方案1: 直接 pip 安装
@@ -209,7 +221,7 @@ def install_libtorrent(platform_type):
     print(f"  尝试 pip install {pip_package}...")
     success, output = install_pip_packages([pip_package])
     if success and check_package_available("libtorrent"):
-        print(green(f"  ✓ {pip_package} 安装成功!"))
+        print(green(f"  [OK] {pip_package} 安装成功!"))
         return True
 
     # 方案2: 平台特定
@@ -219,7 +231,7 @@ def install_libtorrent(platform_type):
             print(f"  尝试 {variant}...")
             success, _ = install_pip_packages([variant])
             if success and check_package_available("libtorrent"):
-                print(green(f"  ✓ {variant} 安装成功!"))
+                print(green(f"  [OK] {variant} 安装成功!"))
                 return True
 
     elif platform_type == "macos":
@@ -235,7 +247,7 @@ def install_libtorrent(platform_type):
         print("  或 conda:")
         print("    conda install -c conda-forge python-libtorrent")
 
-    print(yellow("  ⚠ libtorrent 安装失败，P2P 功能将不可用"))
+    print(yellow("  [WARN] libtorrent 安装失败，P2P 功能将不可用"))
     print("  但守护进程仍可运行，可通过界面管理资产")
     return False  # libtorrent 失败不阻断主流程
 
@@ -247,16 +259,16 @@ def verify_installation():
     all_ok = True
     for pkg, mod in [("fastapi", "fastapi"), ("uvicorn", "uvicorn"), ("requests", "requests")]:
         if check_package_available(pkg):
-            print(green(f"  ✓ {pkg}"))
+            print(green(f"  [OK] {pkg}"))
         else:
-            print(red(f"  ✗ {pkg} 未安装"))
+            print(red(f"  [FAIL] {pkg} 未安装"))
             all_ok = False
 
     lt_ok = check_package_available("libtorrent")
     if lt_ok:
-        print(green("  ✓ libtorrent (P2P 已就绪)"))
+        print(green("  [OK] libtorrent (P2P 已就绪)"))
     else:
-        print(yellow("  ⚠ libtorrent (P2P 暂不可用)"))
+        print(yellow("  [WARN] libtorrent (P2P 暂不可用)"))
 
     return all_ok
 
@@ -266,11 +278,11 @@ def verify_installation():
 def main():
     plat = get_platform()
     print(f"""
-╔══════════════════════════════════════════════════════╗
-║            BlendLink 一键安装脚本 v0.2.0                  ║
-║   Blender Decentralized Asset Library               ║
-║   检测平台: {plat:<39}║
-╚══════════════════════════════════════════════════════╝
++=================================================+
+|          BlendLink Install v{get_local_version()}            |
+|   Blender Decentralized Asset Library          |
+|   Platform: {plat:<37}|
++=================================================+
 """)
 
     # Step 1: pip
@@ -283,7 +295,7 @@ def main():
     # Step 3: 必需 Python 包
     print(cyan("[3/5] 安装必需 Python 包..."))
     if not install_python_dependencies(plat, REQUIRED):
-        print(red("\n✗ 必需依赖安装失败!"))
+        print(red("\n[FAIL] 必需依赖安装失败!"))
         sys.exit(1)
 
     # Step 4: libtorrent
@@ -293,14 +305,14 @@ def main():
     verify_installation()
 
     print(f"""
-╔══════════════════════════════════════════════════════╗
-║                  安装完成！                          ║
-╠══════════════════════════════════════════════════════╣
-║  下一步:                                             ║
-║    python start_daemon.py    ← 启动守护进程           ║
-║                                                      ║
-║  启动后打开 Blender → N面板 → BlendLink                    ║
-╚══════════════════════════════════════════════════════╝
++=================================================+
+|               Install Complete!                  |
++=================================================+
+|  Next step:                                      |
+|    python start_daemon.py  <- Start daemon      |
+|                                                  |
+|  Then open Blender -> N Panel -> BlendLink       |
++=================================================+
 """)
 
 

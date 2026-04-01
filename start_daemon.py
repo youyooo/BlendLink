@@ -31,7 +31,7 @@ def check_and_install_deps():
     if not MISSING:
         return True  # 全部已有
 
-    print(f"\n📦 检测到缺少依赖: {', '.join(MISSING)}")
+    print(f"\n  检测到缺少依赖: {', '.join(MISSING)}")
     print("  正在自动安装...")
     try:
         import subprocess
@@ -39,10 +39,10 @@ def check_and_install_deps():
             [sys.executable, "-m", "pip", "install"] + MISSING,
             cwd=SCRIPT_DIR,
         )
-        print("  ✓ 安装完成\n")
+        print("  [OK] 安装完成\n")
         return True
     except subprocess.CalledProcessError:
-        print("  ✗ 自动安装失败，请手动运行: pip install " + " ".join(MISSING))
+        print("  [FAIL] 自动安装失败，请手动运行: pip install " + " ".join(MISSING))
         return False
 
 
@@ -70,15 +70,15 @@ def main():
             i += 1
 
     print(f"""
-╔═══════════════════════════════════════════╗
-║         BlendLink 守护进程 启动中               ║
-╠═══════════════════════════════════════════╣
-║  API:    http://127.0.0.1:{port}             ║
-║  Tracker: {tracker}       ║
-║                                           ║
-║  打开 Blender → N面板 → BlendLink 使用         ║
-║  按 Ctrl+C 停止                           ║
-╚═══════════════════════════════════════════╝
++===========================================+
+|     BlendLink Daemon Starting             |
++===========================================+
+|  API:     http://127.0.0.1:{port:<13}|
+|  Tracker: {tracker:<26}|
+|                                           |
+|  Blender -> N Panel -> BlendLink to use   |
+|  Press Ctrl+C to stop                    |
++===========================================+
 """)
 
     # 启动

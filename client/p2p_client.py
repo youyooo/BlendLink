@@ -8,6 +8,7 @@ BlendLink P2P 客户端节点
 4. 积分上报
 """
 
+import hashlib
 import libtorrent as lt
 import time
 import json
@@ -425,8 +426,6 @@ class BlendLinkClient:
         self._ping_tracker_all()  # 最后一次 ping
         print("[BlendLink] 客户端已关闭")
 
-
-import hashlib
 
 if __name__ == "__main__":
     print("=== BlendLink P2P 客户端测试 ===")
